@@ -37,85 +37,109 @@ import com.seyren.core.util.config.SeyrenConfig;
 
 @Named
 public class HipChatNotificationService implements NotificationService {
-    
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(HipChatNotificationService.class);
-    
-    private final SeyrenConfig seyrenConfig;
-    private final String baseUrl;
-    
-    @Inject
-    public HipChatNotificationService(SeyrenConfig seyrenConfig) {
-        this.seyrenConfig = seyrenConfig;
-        this.baseUrl = "https://api.hipchat.com";
-    }
-    
-    protected HipChatNotificationService(SeyrenConfig seyrenConfig, String baseUrl) {
-        this.seyrenConfig = seyrenConfig;
-        this.baseUrl = baseUrl;
-    }
-    
-    @Override
-    public void sendNotification(Check check, Subscription subscription, List<Alert> alerts) throws NotificationFailedException {
-        String token = seyrenConfig.getHipChatAuthToken();
-        String from = seyrenConfig.getHipChatUsername();
-        String[] roomIds = subscription.getTarget().split(",");
-        try {
-            if (check.getState() == AlertType.ERROR) {
-                String message = getHipChatMessage(check);
-                sendMessage(message, MessageColor.RED, roomIds, from, token, true);
-            } else if (check.getState() == AlertType.WARN) {
-                String message = getHipChatMessage(check);
-                sendMessage(message, MessageColor.YELLOW, roomIds, from, token, true);
-            } else if (check.getState() == AlertType.OK) {
-                String message = getHipChatMessage(check);
-                sendMessage(message, MessageColor.GREEN, roomIds, from, token, true);
-            } else {
-                LOGGER.warn("Did not send notification to HipChat for check in state: {}", check.getState());
-            }
-        } catch (Exception e) {
-            throw new NotificationFailedException("Failed to send notification to HipChat", e);
-        }
-    }
-    
-    private String getHipChatMessage(Check check) {
-        String message = "Check <a href=" + seyrenConfig.getBaseUrl() + "/#/checks/" + check.getId() + ">" + check.getName() + "</a> has entered its " + check.getState().toString() + " state.";
-        return message;
-    }
-    
-    private void sendMessage(String message, MessageColor color, String[] roomIds, String from, String authToken, boolean notify) {
-        for (String roomId : roomIds) {
-            LOGGER.info("Posting: {} to {}: {} {}", from, roomId, message, color);
-            HttpClient client = HttpClientBuilder.create().build();
-            String url = baseUrl + "/v1/rooms/message";
-            HttpPost post = new HttpPost(url);
-            
-            try {
-                List<BasicNameValuePair> parameters = new ArrayList<BasicNameValuePair>();
-                parameters.add(new BasicNameValuePair("auth_token", authToken));
-                parameters.add(new BasicNameValuePair("from", from));
-                parameters.add(new BasicNameValuePair("room_id", roomId));
-                parameters.add(new BasicNameValuePair("message", message));
-                parameters.add(new BasicNameValuePair("color", color.name().toLowerCase()));
-                if (notify) {
-                    parameters.add(new BasicNameValuePair("notify", "1"));
-                }
-                post.setEntity(new UrlEncodedFormEntity(parameters));
-                client.execute(post);
-            } catch (Exception e) {
-                LOGGER.warn("Error posting to HipChat", e);
-            } finally {
-                post.releaseConnection();
-                HttpClientUtils.closeQuietly(client);
-            }
-        }
-    }
-    
-    @Override
-    public boolean canHandle(SubscriptionType subscriptionType) {
-        return subscriptionType == SubscriptionType.HIPCHAT;
-    }
-    
-    private enum MessageColor {
-        YELLOW, RED, GREEN, PURPLE, RANDOM;
-    }
+
+	private static final org.slf4j.Logger LOGGER = LoggerFactory
+			.getLogger(HipChatNotificationService.class);
+
+	private final SeyrenConfig seyrenConfig;
+	private final String baseUrl;
+
+	@Inject
+	public HipChatNotificationService(SeyrenConfig seyrenConfig) {
+		this.seyrenConfig = seyrenConfig;
+		this.baseUrl = "https://api.hipchat.com";
+	}
+
+	protected HipChatNotificationService(SeyrenConfig seyrenConfig,
+			String baseUrl) {
+		this.seyrenConfig = seyrenConfig;
+		this.baseUrl = baseUrl;
+	}
+
+	@Override
+	public void sendNotification(Check check, Subscription subscription,
+			List<Alert> alerts) throws NotificationFailedException {
+		String token = seyrenConfig.getHipChatAuthToken();
+		String from = seyrenConfig.getHipChatUsername();
+		String[] roomIds = subscription.getTarget().split(",");
+		try {
+			if (check.getState() == AlertType.ERROR) {
+				String message = getHipChatMessage(check, alerts);
+				sendMessage(message, MessageColor.RED, roomIds, from, token,
+						true);
+			} else if (check.getState() == AlertType.WARN) {
+				String message = getHipChatMessage(check, alerts);
+				sendMessage(message, MessageColor.YELLOW, roomIds, from, token,
+						true);
+			} else if (check.getState() == AlertType.OK) {
+				String message = getHipChatMessage(check, alerts);
+				sendMessage(message, MessageColor.GREEN, roomIds, from, token,
+						true);
+			} else {
+				LOGGER.warn(
+						"Did not send notification to HipChat for check in state: {}",
+						check.getState());
+			}
+		} catch (Exception e) {
+			throw new NotificationFailedException(
+					"Failed to send notification to HipChat", e);
+		}
+	}
+
+	private String getHipChatMessage(Check check, List<Alert> alerts) {
+		String message = "Check <a href=" + seyrenConfig.getBaseUrl()
+				+ "/#/checks/" + check.getId() + ">" + check.getName()
+				+ "</a> has entered its " + check.getState().toString()
+				+ " state.";
+
+		List<String> targets = new ArrayList<String>();
+
+		for (Alert a : alerts) {
+			targets.add(a.getTarget().split("\\.")[3]);
+		}
+
+		java.util.Collections.sort(targets);
+
+		return "(" + org.apache.commons.lang.StringUtils.join(targets, "|")	+ ") " + message;
+	}
+
+	private void sendMessage(String message, MessageColor color,
+			String[] roomIds, String from, String authToken, boolean notify) {
+		for (String roomId : roomIds) {
+			LOGGER.info("Posting: {} to {}: {} {}", from, roomId, message,
+					color);
+			HttpClient client = HttpClientBuilder.create().build();
+			String url = baseUrl + "/v1/rooms/message";
+			HttpPost post = new HttpPost(url);
+
+			try {
+				List<BasicNameValuePair> parameters = new ArrayList<BasicNameValuePair>();
+				parameters.add(new BasicNameValuePair("auth_token", authToken));
+				parameters.add(new BasicNameValuePair("from", from));
+				parameters.add(new BasicNameValuePair("room_id", roomId));
+				parameters.add(new BasicNameValuePair("message", message));
+				parameters.add(new BasicNameValuePair("color", color.name()
+						.toLowerCase()));
+				if (notify) {
+					parameters.add(new BasicNameValuePair("notify", "1"));
+				}
+				post.setEntity(new UrlEncodedFormEntity(parameters));
+				client.execute(post);
+			} catch (Exception e) {
+				LOGGER.warn("Error posting to HipChat", e);
+			} finally {
+				post.releaseConnection();
+				HttpClientUtils.closeQuietly(client);
+			}
+		}
+	}
+
+	@Override
+	public boolean canHandle(SubscriptionType subscriptionType) {
+		return subscriptionType == SubscriptionType.HIPCHAT;
+	}
+
+	private enum MessageColor {
+		YELLOW, RED, GREEN, PURPLE, RANDOM;
+	}
 }
