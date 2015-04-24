@@ -110,7 +110,7 @@ public class HipChatNotificationService implements NotificationService {
 			for (Alert a : alerts) {
 				Matcher m = pattern.matcher(a.getTarget());
 				while (m.find()) {
-					targets.add(m.group(1));
+					targets.add(m.group(1));					
 				}
 			}
 			java.util.Collections.sort(targets);
