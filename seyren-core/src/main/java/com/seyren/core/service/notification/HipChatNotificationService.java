@@ -15,6 +15,8 @@ package com.seyren.core.service.notification;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -61,18 +63,27 @@ public class HipChatNotificationService implements NotificationService {
 			List<Alert> alerts) throws NotificationFailedException {
 		String token = seyrenConfig.getHipChatAuthToken();
 		String from = seyrenConfig.getHipChatUsername();
-		String[] roomIds = subscription.getTarget().split(",");
+
+		String target = subscription.getTarget();
+		String regex = null;
+		if (target.contains(":")) {
+			String[] parts = target.split(":");
+			regex = parts[1];
+			target = parts[0];
+		}
+
+		String[] roomIds = target.split(",");
 		try {
 			if (check.getState() == AlertType.ERROR) {
-				String message = getHipChatMessage(check, alerts);
+				String message = getHipChatMessage(check, alerts, regex);
 				sendMessage(message, MessageColor.RED, roomIds, from, token,
 						true);
 			} else if (check.getState() == AlertType.WARN) {
-				String message = getHipChatMessage(check, alerts);
+				String message = getHipChatMessage(check, alerts, regex);
 				sendMessage(message, MessageColor.YELLOW, roomIds, from, token,
 						true);
 			} else if (check.getState() == AlertType.OK) {
-				String message = getHipChatMessage(check, alerts);
+				String message = getHipChatMessage(check, alerts, regex);
 				sendMessage(message, MessageColor.GREEN, roomIds, from, token,
 						true);
 			} else {
@@ -86,21 +97,29 @@ public class HipChatNotificationService implements NotificationService {
 		}
 	}
 
-	private String getHipChatMessage(Check check, List<Alert> alerts) {
+	private String getHipChatMessage(Check check, List<Alert> alerts,
+			String regex) {
 		String message = "Check <a href=" + seyrenConfig.getBaseUrl()
 				+ "/#/checks/" + check.getId() + ">" + check.getName()
 				+ "</a> has entered its " + check.getState().toString()
 				+ " state.";
 
-		List<String> targets = new ArrayList<String>();
+		if (regex != null) {
+			Pattern pattern = Pattern.compile(regex);
+			List<String> targets = new ArrayList<String>();
+			for (Alert a : alerts) {
+				Matcher m = pattern.matcher(a.getTarget());
+				while (m.find()) {
+					targets.add(m.group(1));
+				}
+			}
+			java.util.Collections.sort(targets);
 
-		for (Alert a : alerts) {
-			targets.add(a.getTarget().split("\\.")[3]);
+			return "(" + org.apache.commons.lang.StringUtils.join(targets, "|")
+					+ ") " + message;
 		}
 
-		java.util.Collections.sort(targets);
-
-		return "(" + org.apache.commons.lang.StringUtils.join(targets, "|")	+ ") " + message;
+		return message;
 	}
 
 	private void sendMessage(String message, MessageColor color,
